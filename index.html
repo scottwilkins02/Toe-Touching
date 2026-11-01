@@ -163,6 +163,7 @@ h1{font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;fo
 .set{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
 .set b{font-weight:600;display:block}
 .set small{color:var(--ink-2);font-size:13px}
+.pick{appearance:none;-webkit-appearance:none;border:0;background:var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%235D6878' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;color:var(--ink);font:inherit;font-size:15px;font-weight:600;border-radius:12px;padding:9px 32px 9px 12px;max-width:52%}
 .sw{position:relative;width:52px;height:32px;flex:none}
 .sw input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
 .sw span{position:absolute;inset:0;border-radius:16px;background:var(--surface-2);transition:background .2s;pointer-events:none}
@@ -527,12 +528,21 @@ function showSound(){
     <h3>Sound</h3>
     <p class="sub">Sessions are hands-free: a voice names each stretch and beeps count you in and out.</p>
     <label class="set"><span><b>Voice prompts</b><small>Names each stretch and side</small></span><span class="sw"><input type="checkbox" id="sVoice" ${settings.voice ? 'checked' : ''}><span></span></span></label>
+    <div class="set"><span><b>Voice</b><small>Female UK voices listed first</small></span><select id="sVoiceName" class="pick" aria-label="Voice"></select></div>
     <label class="set"><span><b>Beeps</b><small>Three-second countdown and start tone</small></span><span class="sw"><input type="checkbox" id="sBeeps" ${settings.beeps ? 'checked' : ''}><span></span></span></label>
     <p class="sub" style="margin-top:14px;font-size:13px">If you hear nothing, turn the volume up and check silent mode in Control Centre. The line under the button shows what the phone reports.</p>
     <button class="btn btn-y" id="sTest">Test sound</button>
     <p class="sub" id="sStatus" style="font-size:13px;margin-top:10px" aria-live="polite"></p>
     <button class="btn btn-ghost" data-close>Close</button>`);
   $('sVoice').addEventListener('change', e => { settings.voice = e.target.checked; saveSettings(); syncSoundIcon(); });
+  const fillVoices = () => {
+    const sel = $('sVoiceName'); if (!sel) return;
+    const list = englishVoices(); pickVoice();
+    sel.innerHTML = list.length ? list.map(v => `<option value="${v.name}" ${voice && v.name === voice.name ? 'selected' : ''}>${v.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()}${/premium/i.test(v.name) ? ' (Premium)' : /enhanced/i.test(v.name) ? ' (Enhanced)' : ''}</option>`).join('') : '<option>Default</option>';
+  };
+  fillVoices();
+  if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', fillVoices);
+  $('sVoiceName').addEventListener('change', e => { settings.voiceName = e.target.value; saveSettings(); pickVoice(); audioInit(); say('Hold, and breathe. Switch to the right leg.'); });
   $('sBeeps').addEventListener('change', e => { settings.beeps = e.target.checked; saveSettings(); syncSoundIcon(); });
   $('sTest').addEventListener('click', () => {
     audioInit();
@@ -555,11 +565,24 @@ $('sheet').addEventListener('click', e => { if (e.target.closest('[data-close]')
 
 /* ---------- Audio ---------- */
 let ac = null, voice = null;
+const FEMALE = ['Serena','Kate','Martha','Stephanie','Moira','Tessa','Karen','Samantha','Fiona','Catherine','Allison','Ava','Susan','Zoe'];
+const MALE = /Daniel|Arthur|Oliver|Fred|Rishi|Aaron|Alex\b|Tom\b|Gordon|Lee\b|Reed|Rocko|Eddy|Grandpa|Evan|Nathan|Malcolm|Nicky/i;
+const NOVELTY = /Eloquence|Bad News|Good News|Bells|Boing|Bubbles|Cellos|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Albert|Junior|Ralph|Bahh|Shelley|Sandy|Flo\b|Grandma/i;
+function voiceScore(v){
+  if (!/^en/i.test(v.lang) || NOVELTY.test(v.name)) return -1;
+  let s = /en[-_]GB/i.test(v.lang) ? 50 : /en[-_](IE|AU)/i.test(v.lang) ? 25 : 10;
+  if (/premium/i.test(v.name)) s += 30; else if (/enhanced/i.test(v.name)) s += 20;
+  const i = FEMALE.findIndex(n => v.name.includes(n)); if (i >= 0) s += 40 - i * 2;
+  if (MALE.test(v.name)) s -= 60;
+  return s;
+}
+function englishVoices(){
+  if (!('speechSynthesis' in window)) return [];
+  return speechSynthesis.getVoices().filter(v => voiceScore(v) >= 0).sort((a, b) => voiceScore(b) - voiceScore(a));
+}
 function pickVoice(){
-  if (!('speechSynthesis' in window)) return;
-  const v = speechSynthesis.getVoices();
-  voice = v.find(x => /en[-_]GB/i.test(x.lang) && /Daniel|Serena|Kate|Arthur|Martha|Oliver/.test(x.name))
-       || v.find(x => /en[-_]GB/i.test(x.lang)) || v.find(x => /^en/i.test(x.lang)) || null;
+  const list = englishVoices(); if (!list.length) return;
+  voice = (settings.voiceName && list.find(v => v.name === settings.voiceName)) || list[0];
 }
 if ('speechSynthesis' in window){ pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
 function audioInit(){
@@ -588,7 +611,7 @@ function say(text){
     if (speechSynthesis.paused) speechSynthesis.resume();
     const u = new SpeechSynthesisUtterance(text);
     if (voice){ u.voice = voice; u.lang = voice.lang; } else u.lang = 'en-GB';
-    u.rate = 1; u.pitch = 1;
+    u.rate = 0.95; u.pitch = 1;
     speechSynthesis.speak(u);
   } catch(e){}
 }

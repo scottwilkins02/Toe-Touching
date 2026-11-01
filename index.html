@@ -528,12 +528,27 @@ function showSound(){
     <p class="sub">Sessions are hands-free: a voice names each stretch and beeps count you in and out.</p>
     <label class="set"><span><b>Voice prompts</b><small>Names each stretch and side</small></span><span class="sw"><input type="checkbox" id="sVoice" ${settings.voice ? 'checked' : ''}><span></span></span></label>
     <label class="set"><span><b>Beeps</b><small>Three-second countdown and start tone</small></span><span class="sw"><input type="checkbox" id="sBeeps" ${settings.beeps ? 'checked' : ''}><span></span></span></label>
-    <p class="sub" style="margin-top:14px;font-size:13px">If you hear nothing, check the ring/silent switch on the side of the iPhone and the volume.</p>
+    <p class="sub" style="margin-top:14px;font-size:13px">If you hear nothing, turn the volume up and check silent mode in Control Centre. The line under the button shows what the phone reports.</p>
     <button class="btn btn-y" id="sTest">Test sound</button>
+    <p class="sub" id="sStatus" style="font-size:13px;margin-top:10px" aria-live="polite"></p>
     <button class="btn btn-ghost" data-close>Close</button>`);
   $('sVoice').addEventListener('change', e => { settings.voice = e.target.checked; saveSettings(); syncSoundIcon(); });
   $('sBeeps').addEventListener('change', e => { settings.beeps = e.target.checked; saveSettings(); syncSoundIcon(); });
-  $('sTest').addEventListener('click', () => { audioInit(); tone(660, .1); setTimeout(() => tone(990, .25, .22), 350); say('Voice prompts are working.'); });
+  $('sTest').addEventListener('click', () => {
+    audioInit();
+    say('Voice prompts are working.');
+    tone(660, .1); setTimeout(() => tone(990, .25, .22), 350);
+    const st = $('sStatus');
+    const report = () => {
+      const parts = [];
+      parts.push('Beeps: ' + (!ac ? 'not supported' : ac.state === 'running' ? 'audio on' : 'audio ' + ac.state));
+      parts.push('Silent-mode override: ' + (navigator.audioSession ? navigator.audioSession.type : 'not available'));
+      if ('speechSynthesis' in window){ const n = speechSynthesis.getVoices().length; parts.push('Voice: ' + (voice ? voice.name : n ? 'default' : 'no voices loaded yet')); }
+      else parts.push('Voice: not supported');
+      st.textContent = parts.join('. ') + '.';
+    };
+    setTimeout(report, 600);
+  });
 }
 
 $('sheet').addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
@@ -548,8 +563,15 @@ function pickVoice(){
 }
 if ('speechSynthesis' in window){ pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
 function audioInit(){
+  // iOS: 'playback' lets web audio play even when the iPhone is on silent
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch(e){}
   if (!ac){ const C = window.AudioContext || window.webkitAudioContext; if (C) ac = new C(); }
-  if (ac && ac.state === 'suspended') ac.resume();
+  if (ac){
+    if (ac.state !== 'running') ac.resume().catch(() => {});
+    // play one silent sample inside the tap to unlock audio on iOS
+    try { const b = ac.createBuffer(1, 1, 22050), src = ac.createBufferSource(); src.buffer = b; src.connect(ac.destination); src.start(0); } catch(e){}
+  }
+  if ('speechSynthesis' in window && !voice) pickVoice();
 }
 function tone(freq = 660, dur = .1, vol = .18){
   if (!settings.beeps || !ac) return;
@@ -561,7 +583,9 @@ function tone(freq = 660, dur = .1, vol = .18){
 function say(text){
   if (!settings.voice || !('speechSynthesis' in window)) return;
   try {
-    speechSynthesis.cancel();
+    // cancelling right before speaking makes iOS drop the new phrase, so only cancel if something is playing
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+    if (speechSynthesis.paused) speechSynthesis.resume();
     const u = new SpeechSynthesisUtterance(text);
     if (voice){ u.voice = voice; u.lang = voice.lang; } else u.lang = 'en-GB';
     u.rate = 1; u.pitch = 1;

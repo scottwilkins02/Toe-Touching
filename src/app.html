@@ -78,6 +78,36 @@ h1{font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;fo
 .bar div{height:100%;background:var(--tape);border-radius:4px}
 .goal-meta{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-2);margin-top:6px}
 .goal svg{width:104px;height:140px;display:block}
+.goal-reach{font-size:15px;font-weight:600;margin-top:6px}
+.goal-reach span{color:var(--ink-2);font-weight:500}
+.due{display:inline-block;font-size:12px;font-weight:700;background:var(--tape);color:var(--tape-ink);border-radius:999px;padding:2px 9px;margin-left:6px;vertical-align:2px}
+.goal-actions{grid-column:1/-1;display:flex;gap:10px}
+.goal-actions .btn{margin-top:4px;padding:13px;font-size:15px}
+.stepper{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:18px}
+.stepper button{width:58px;height:58px;border-radius:50%;border:0;background:var(--surface-2);font-size:30px;line-height:1;font-weight:500;color:var(--ink);touch-action:manipulation}
+.stepper .val{text-align:center}
+.stepper input{width:140px;border:0;background:none;text-align:center;font:700 58px/1 ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+.stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.stepper input:focus{outline:none;border-bottom:3px solid var(--tape)}
+.stepper .val span{display:block;font-size:14px;color:var(--ink-2);margin-top:2px}
+.seg{display:flex;background:var(--surface-2);border-radius:14px;padding:4px;margin-top:18px}
+.seg button{flex:1;border:0;background:none;border-radius:10px;padding:10px;font-weight:600;font-size:15px;color:var(--ink-2)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.kpi{background:var(--surface-2);border-radius:16px;padding:12px}
+.kpi b{display:block;font-size:19px;line-height:1.2;white-space:nowrap}
+.kpi span{font-size:12px;color:var(--ink-2)}
+.chart{margin-top:18px;position:relative;touch-action:pan-y}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;transform:translate(-50%,calc(-100% - 12px));background:var(--ink);color:var(--surface);font-size:13px;font-weight:600;padding:6px 10px;border-radius:9px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s}
+.tip.on{opacity:1}
+.hist{list-style:none;margin-top:6px}
+.hist li{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
+.hist li span{color:var(--ink-2);font-size:14px;min-width:96px}
+.hist li b{margin-left:auto;font-weight:600}
+.hist button{border:0;background:var(--surface-2);color:var(--ink-2);padding:6px 10px;border-radius:10px;font-size:13px;font-weight:600}
+.hist button.sure{background:#D8473C;color:#fff}
+.empty{background:var(--surface-2);border-radius:16px;padding:18px;text-align:center;color:var(--ink-2);margin-top:16px;font-size:15px}
 .goal-note{grid-column:1/-1;font-size:13px;color:var(--ink-3);border-top:1px solid var(--line);padding-top:12px;margin-top:6px}
 
 .list{margin-top:10px;border-radius:24px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
@@ -227,11 +257,13 @@ h1{font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;fo
     <div>
       <div class="goal-k">Your goal</div>
       <h3 id="goalTitle">Touch your toes by 3 January</h3>
+      <div class="goal-reach" id="goalReach"></div>
       <div class="bar"><div id="goalBar"></div></div>
       <div class="goal-meta"><span id="goalWeek"></span><span id="goalLeft"></span></div>
     </div>
     <svg viewBox="0 0 104 140" aria-hidden="true" id="gaugeArt"></svg>
-    <div class="goal-note">The gauge shows your estimated start: fingertips at mid-shin. The weekly reach test will replace it with your real figure.</div>
+    <div class="goal-actions"><button class="btn btn-y" id="logReach">Log reach test</button><button class="btn btn-ghost" id="openProgress">Progress</button></div>
+    <div class="goal-note" id="goalNote"></div>
   </section>
 
   <div class="sec-h" style="margin-top:28px"><b>Today's stretches</b><span id="listMeta"></span></div>
@@ -241,7 +273,7 @@ h1{font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;fo
     <button class="link" id="openSafety"></button>
     <button class="link" id="openSettings2"></button>
   </div>
-  <div class="ver">Touching Toes, version 2</div>
+  <div class="ver">Touching Toes, version 3</div>
 </main>
 
 <section class="player" id="player" hidden aria-label="Session">
@@ -398,19 +430,31 @@ function weekInfo(){
 }
 
 /* ---------- Home ---------- */
-function gaugeSVG(){
+const reaches = () => store.get('reaches', []).slice().sort((a, b) => a.at - b.at);
+const toeCm = () => (typeof settings.toeCm === 'number' ? settings.toeCm : 3);
+const nfmt = n => String(Math.round(n * 10) / 10);
+const cmLabel = cm => cm < 0 ? `${nfmt(-cm)} cm past the floor` : `${nfmt(cm)} cm above the floor`;
+const cmShort = cm => (cm < 0 ? '−' + nfmt(-cm) : nfmt(cm)) + ' cm';
+const dshort = at => new Date(at).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+const EST_CM = 20;
+
+function gaugeSVG(cm, estimate){
   const ticks = [...Array(13)].map((_, i) => { const y = 12 + i * 10; const major = i % 5 === 0; return `<line x1="${major ? 70 : 76}" y1="${y}" x2="86" y2="${y}" stroke="#18202C" stroke-width="${major ? 1.6 : 1}" opacity=".7"/>`; }).join('');
+  const yOf = c => Math.max(8, Math.min(140, 132 - c * 3));
+  const my = yOf(cm), ty = yOf(toeCm());
+  const close = Math.abs(my - ty) < 18;
+  const font = 'font-family="-apple-system,system-ui,sans-serif"';
   return `
     <line x1="6" y1="132" x2="100" y2="132" stroke="var(--floor)" stroke-width="3" stroke-linecap="round"/>
     <path d="M24 4 L27 122 Q27 130 36 130 L54 130 Q60 130 58 124 Q53 119 42 115 L40 4Z" fill="${FIG.skin}" opacity=".9"/>
     <rect x="66" y="4" width="24" height="128" rx="5" fill="var(--tape)"/>
     ${ticks}
-    <line x1="10" y1="66" x2="66" y2="66" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>
-    <circle cx="33" cy="66" r="7" fill="var(--ink)"/>
-    <text x="2" y="56" font-size="11" font-weight="600" fill="var(--ink-2)" font-family="-apple-system,system-ui,sans-serif">Now</text>
-    <line x1="44" y1="124" x2="66" y2="124" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>
-    <text x="2" y="113" font-size="11" font-weight="700" fill="var(--ink)" font-family="-apple-system,system-ui,sans-serif">Toes</text>
-    <path d="M33 77 L33 104" stroke="var(--ink-3)" stroke-width="2" stroke-linecap="round"/><path d="M28 101l5 6 5-6" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    <line x1="44" y1="${ty}" x2="66" y2="${ty}" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>
+    ${close ? '' : `<text x="2" y="${ty - 11}" font-size="11" font-weight="700" fill="var(--ink)" ${font}>Toes</text>`}
+    ${close || my > ty ? '' : `<path d="M33 ${my + 11} L33 ${ty - 20}" stroke="var(--ink-3)" stroke-width="2" stroke-linecap="round"/><path d="M28 ${ty - 23}l5 6 5-6" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`}
+    <line x1="10" y1="${my}" x2="66" y2="${my}" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>
+    <circle cx="33" cy="${my}" r="7" fill="${estimate ? 'var(--surface)' : 'var(--ink)'}" stroke="var(--ink)" stroke-width="2.5"/>
+    <text x="2" y="${my - 10}" font-size="11" font-weight="600" fill="var(--ink-2)" ${font}>${estimate ? 'Est.' : 'Now'}</text>`;
 }
 
 function renderHome(){
@@ -433,7 +477,17 @@ function renderHome(){
   $('goalBar').style.width = Math.max(3, (total - left) / total * 100) + '%';
   $('goalWeek').textContent = `Week ${wk} of ${Math.ceil(total / 7)}`;
   $('goalLeft').textContent = left === 1 ? '1 day to go' : `${left} days to go`;
-  $('gaugeArt').innerHTML = gaugeSVG();
+  const R = reaches(), last = R[R.length - 1];
+  const due = !last || (Date.now() - last.at) > 6.5 * 86400000;
+  $('gaugeArt').innerHTML = gaugeSVG(last ? last.cm : EST_CM, !last);
+  if (last){
+    const gap = last.cm - toeCm();
+    $('goalReach').innerHTML = (gap <= 0 ? 'Toes reached' : `${nfmt(gap)} cm to go`) + (due ? '<span class="due">Test due</span>' : '');
+    $('goalNote').textContent = `Last reach test ${new Date(last.at).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' })}. Test once a week, before stretching.`;
+  } else {
+    $('goalReach').innerHTML = 'No reach test yet <span class="due">Test due</span>';
+    $('goalNote').textContent = 'The gauge shows your estimated start: fingertips at mid-shin. Log a reach test to set your real figure.';
+  }
 
   $('listMeta').textContent = `${mins} min`;
   $('list').innerHTML = ROUTINE.map((ex, i) => `
@@ -501,6 +555,109 @@ function showPreview(){
   $('goStart').addEventListener('click', () => { closeSheet(); startSession(); });
 }
 
+function showReachTest(){
+  const R = reaches(), last = R[R.length - 1];
+  let past = last ? last.cm < 0 : false;
+  openSheet(`
+    <h3>Reach test</h3>
+    <p class="sub">Once a week, before you stretch, at about the same time of day.</p>
+    <ol class="how">
+      <li>Barefoot, feet together, knees straight.</li>
+      <li>Breathe out and reach down slowly with both hands. No bouncing.</li>
+      <li>Hold for two seconds and measure from your middle fingertip to the floor.</li>
+      <li>Have three tries and enter your best.</li>
+    </ol>
+    <div class="seg" role="group" aria-label="Where your fingertips reach"><button data-v="0" class="${past ? '' : 'on'}">Above the floor</button><button data-v="1" class="${past ? 'on' : ''}">Past the floor</button></div>
+    <div class="stepper">
+      <button id="rMinus" aria-label="Decrease">−</button>
+      <div class="val"><input id="rVal" type="number" inputmode="decimal" step="0.5" min="0" max="60" value="${last ? nfmt(Math.abs(last.cm)) : EST_CM}" aria-label="Centimetres"><span>cm</span></div>
+      <button id="rPlus" aria-label="Increase">+</button>
+    </div>
+    <p class="sub" id="rHint" style="text-align:center;font-size:13px;margin-top:8px"></p>
+    <button class="btn btn-y" id="rSave">Save result</button>
+    <button class="btn btn-ghost" data-close>Cancel</button>`);
+  const inp = $('rVal');
+  const hint = () => { $('rHint').textContent = past ? 'Stand on a step so you can measure below floor level.' : 'Fingertips at the tops of your toes is about ' + nfmt(toeCm()) + ' cm.'; };
+  hint();
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { past = b.dataset.v === '1'; document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b)); hint(); }));
+  const bump = d => { const v = Math.max(0, Math.min(60, (parseFloat(inp.value) || 0) + d)); inp.value = nfmt(v); };
+  [['rMinus', -0.5], ['rPlus', 0.5]].forEach(([id, d]) => {
+    let t = null, r = null; const b = $(id);
+    const stop = () => { clearTimeout(t); clearInterval(r); t = r = null; };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); bump(d); t = setTimeout(() => { r = setInterval(() => bump(d), 90); }, 380); });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+  });
+  $('rSave').addEventListener('click', () => {
+    const v = parseFloat(inp.value);
+    if (!isFinite(v) || v < 0 || v > 60){ toast('Enter a distance between 0 and 60 cm'); return; }
+    const cm = past ? -v : v, now = new Date(), today = ymd(now);
+    const list = reaches().filter(x => x.date !== today);
+    list.push({ date: today, at: now.getTime(), cm });
+    store.set('reaches', list);
+    closeSheet(); renderHome(); toast('Saved: ' + cmLabel(cm));
+    setTimeout(showProgress, 420);
+  });
+}
+
+function chartSVG(R){
+  const W = 340, H = 196, L = 34, Rm = 14, T = 12, B = 26;
+  const x0 = Math.min(R[0].at, START.getTime()), x1 = Math.max(TARGET.getTime(), R[R.length - 1].at);
+  const vals = R.map(r => r.cm).concat([toeCm()]);
+  const yMax = Math.max(30, Math.ceil((Math.max(...vals) + 3) / 10) * 10), yMin = Math.min(0, Math.floor((Math.min(...vals) - 2) / 5) * 5);
+  const X = t => L + (t - x0) / (x1 - x0) * (W - L - Rm), Y = v => T + (yMax - v) / (yMax - yMin) * (H - T - B);
+  let g = '';
+  for (let v = yMin; v <= yMax; v += 10){ g += `<line x1="${L}" y1="${Y(v)}" x2="${W - Rm}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--ink-3)">${v}</text>`; }
+  g += `<rect x="${L}" y="${Y(toeCm())}" width="${W - Rm - L}" height="${Y(yMin) - Y(toeCm())}" fill="var(--tape)" opacity=".22"/>`;
+  g += `<line x1="${L}" y1="${Y(toeCm())}" x2="${W - Rm}" y2="${Y(toeCm())}" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+  g += `<text x="${W - Rm}" y="${Y(toeCm()) - 6}" text-anchor="end" font-size="11" font-weight="700" fill="var(--ink-2)">Toes</text>`;
+  g += `<line x1="${X(TARGET.getTime())}" y1="${T}" x2="${X(TARGET.getTime())}" y2="${H - B}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 4"/>`;
+  g += `<text x="${L}" y="${H - 6}" font-size="11" fill="var(--ink-3)">${dshort(x0)}</text><text x="${W - Rm}" y="${H - 6}" text-anchor="end" font-size="11" fill="var(--ink-3)">Target ${dshort(TARGET)}</text>`;
+  if (R.length > 1) g += `<polyline points="${R.map(r => X(r.at) + ',' + Y(r.cm)).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  R.forEach((r, i) => { g += `<circle cx="${X(r.at)}" cy="${Y(r.cm)}" r="${i === R.length - 1 ? 5.5 : 4.5}" fill="${i === R.length - 1 ? 'var(--tape)' : 'var(--ink)'}" stroke="var(--surface)" stroke-width="2"/>`; });
+  const pts = R.map(r => ({ x: X(r.at) / W, y: Y(r.cm) / H, r }));
+  return { svg: `<svg viewBox="0 0 ${W} ${H}" font-family="-apple-system,system-ui,sans-serif" role="img" aria-label="Reach distance over time">${g}</svg>`, pts };
+}
+
+function showProgress(){
+  const R = reaches();
+  if (!R.length){
+    openSheet(`<h3>Reach progress</h3><div class="empty">No reach tests yet. Your first one sets the starting point for the chart.</div>
+      <button class="btn btn-y" id="pLog">Log reach test</button><button class="btn btn-ghost" data-close>Close</button>`);
+    $('pLog').addEventListener('click', () => { closeSheet(); setTimeout(showReachTest, 380); });
+    return;
+  }
+  const first = R[0], last = R[R.length - 1], diff = first.cm - last.cm;
+  const ch = chartSVG(R);
+  openSheet(`
+    <h3>Reach progress</h3>
+    <p class="sub">Fingertip distance from the floor. Lower is better; the shaded band is toe level and beyond.</p>
+    <div class="kpis">
+      <div class="kpi"><b class="rd">${cmShort(first.cm)}</b><span>Start, ${dshort(first.at)}</span></div>
+      <div class="kpi"><b class="rd">${cmShort(last.cm)}</b><span>Latest, ${dshort(last.at)}</span></div>
+      <div class="kpi"><b class="rd">${R.length > 1 ? (diff >= 0 ? nfmt(diff) + ' cm' : '−' + nfmt(-diff) + ' cm') : '–'}</b><span>${R.length > 1 ? (diff >= 0 ? 'Closer' : 'Further away') : 'Needs 2 tests'}</span></div>
+    </div>
+    <div class="chart" id="chart">${ch.svg}<div class="tip" id="tip"></div></div>
+    <h4>History</h4>
+    <ul class="hist">${R.slice().reverse().map(r => `<li><span>${new Date(r.at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}</span><b>${cmLabel(r.cm)}</b><button data-at="${r.at}">Delete</button></li>`).join('')}</ul>
+    <button class="btn btn-y" id="pLog">Log reach test</button>
+    <button class="btn btn-ghost" data-close>Close</button>`);
+  $('pLog').addEventListener('click', () => { closeSheet(); setTimeout(showReachTest, 380); });
+  const chart = $('chart'), tip = $('tip');
+  const show = e => {
+    const box = chart.getBoundingClientRect(), fx = (e.clientX - box.left) / box.width;
+    let best = ch.pts[0]; ch.pts.forEach(p => { if (Math.abs(p.x - fx) < Math.abs(best.x - fx)) best = p; });
+    tip.textContent = `${dshort(best.r.at)}: ${cmShort(best.r.cm)}`;
+    tip.style.left = (best.x * 100) + '%'; tip.style.top = (best.y * 100) + '%'; tip.classList.add('on');
+  };
+  chart.addEventListener('pointerdown', show); chart.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons) show(e); });
+  chart.addEventListener('pointerleave', () => tip.classList.remove('on'));
+  document.querySelectorAll('.hist button').forEach(b => b.addEventListener('click', () => {
+    if (!b.classList.contains('sure')){ b.classList.add('sure'); b.textContent = 'Confirm'; return; }
+    store.set('reaches', reaches().filter(x => String(x.at) !== b.dataset.at));
+    renderHome(); toast('Reach test deleted'); showProgress();
+  }));
+}
+
 function showSafety(startAfter){
   openSheet(`
     <h3>Stretch safely</h3>
@@ -523,11 +680,11 @@ function showSettings(){
     <h4>Sound</h4>
     <label class="set"><span><b>Voice prompts</b><small>Names each stretch and side</small></span><span class="sw"><input type="checkbox" id="sVoice" ${settings.voice ? 'checked' : ''}><span></span></span></label>
     <div class="set"><span><b>Voice</b><small>Female UK voices listed first</small></span><select id="sVoiceName" class="pick" aria-label="Voice"></select></div>
-    <label class="set"><span><b>Beeps</b><small>Countdown and start tone</small></span><span class="sw"><input type="checkbox" id="sBeeps" ${settings.beeps ? 'checked' : ''}><span></span></span></label>
+    <label class="set"><span><b>Beeps</b><small>Five-second countdown before each stretch ends</small></span><span class="sw"><input type="checkbox" id="sBeeps" ${settings.beeps ? 'checked' : ''}><span></span></span></label>
     <button class="btn btn-ghost" id="sTest" style="margin-top:14px">Test sound</button>
     <p class="sub" id="sStatus" style="font-size:13px;margin-top:8px" aria-live="polite"></p>
     <h4>Backup</h4>
-    <p class="sub">Your sessions are stored only on this phone. Save a backup file every week or two, to iCloud Drive or Files.</p>
+    <p class="sub">Your sessions and reach tests are stored only on this phone. Save a backup file every week or two, to iCloud Drive or Files.</p>
     <div class="btn-row"><button class="btn btn-y" id="bExport">Save backup</button><button class="btn btn-ghost" id="bImport">Restore</button></div>
     <p class="sub" style="font-size:13px;margin-top:8px">${last ? 'Last backup: ' + new Date(last).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : 'No backup saved yet.'}</p>
     <button class="btn btn-ghost" data-close style="margin-top:22px">Close</button>`);
@@ -557,7 +714,7 @@ function showSettings(){
 
 /* ---------- Backup ---------- */
 async function exportData(){
-  const data = { app:'touching-toes', version:2, exported:new Date().toISOString(), sessions:sessions(), settings, safetyOk:store.get('safetyOk', false) };
+  const data = { app:'touching-toes', version:3, exported:new Date().toISOString(), sessions:sessions(), reaches:reaches(), settings, safetyOk:store.get('safetyOk', false) };
   const name = `touching-toes-backup-${ymd(new Date())}.json`;
   const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
   const done = () => { store.set('lastBackup', Date.now()); closeSheet(); toast('Backup saved'); };
@@ -580,7 +737,10 @@ $('importFile').addEventListener('change', e => {
       store.set('sessions', cur.concat(added).sort((a, b) => a.at - b.at));
       if (d.settings){ Object.assign(settings, d.settings); saveSettings(); pickVoice(); }
       if (d.safetyOk) store.set('safetyOk', true);
-      closeSheet(); renderHome(); toast(added.length ? `Restored ${added.length} session${added.length === 1 ? '' : 's'}` : 'Nothing new to restore');
+      let addedR = [];
+      if (Array.isArray(d.reaches)){ const curR = reaches(), seenR = new Set(curR.map(x => x.at)); addedR = d.reaches.filter(x => x && x.at && typeof x.cm === 'number' && !seenR.has(x.at)); store.set('reaches', curR.concat(addedR)); }
+      const n = added.length + addedR.length;
+      closeSheet(); renderHome(); toast(n ? `Restored ${added.length} session${added.length === 1 ? '' : 's'} and ${addedR.length} reach test${addedR.length === 1 ? '' : 's'}` : 'Nothing new to restore');
     } catch(err){ toast("That file isn't a Touching Toes backup"); }
   };
   r.readAsText(f);
@@ -614,7 +774,7 @@ function audioInit(){
 function tone(freq = 660, dur = .1, vol = .18){
   if (!settings.beeps || !ac) return;
   const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
-  o.type = 'sine'; o.frequency.value = freq;
+  o.type = 'triangle'; o.frequency.value = freq;
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
   o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + .03);
 }
@@ -705,7 +865,8 @@ function loop(now){
   const st = S.steps[S.i], ex = ROUTINE[st.ei], el = elapsed(), rem = st.dur - el, sec = Math.max(0, Math.ceil(rem));
   if (sec !== S.lastSec){
     S.lastSec = sec; $('pNum').textContent = sec;
-    if (!S.paused && sec >= 1 && sec <= 3) tone(660, .09);
+    if (!S.paused && st.type === 'work' && sec >= 1 && sec <= 5) tone(sec <= 3 ? 1046 : 784, sec <= 3 ? .14 : .09, sec <= 3 ? .34 : .24);
+    else if (!S.paused && st.type === 'prep' && sec >= 1 && sec <= 3) tone(659, .1, .24);
     if (!S.paused && st.type === 'work' && st.dur >= 60 && !S.halfSaid && el >= st.dur / 2){ S.halfSaid = true; say('Halfway.'); }
   }
   const m = motion(st, ex, el);
@@ -717,7 +878,7 @@ function loop(now){
   const before = S.steps.slice(0, S.i).reduce((a, s) => a + s.dur, 0);
   $('pBar').style.width = Math.min(100, (before + Math.min(el, st.dur)) / S.total * 100) + '%';
   if (!S.paused && rem <= 0){
-    if (S.i + 1 < S.steps.length){ tone(st.type === 'prep' ? 990 : 520, st.type === 'prep' ? .28 : .18, .22); enterStep(S.i + 1); }
+    if (S.i + 1 < S.steps.length){ st.type === 'prep' ? tone(988, .3, .34) : (tone(1318, .45, .36), setTimeout(() => tone(1046, .3, .28), 120)); enterStep(S.i + 1); }
     else { finish(); return; }
   }
   S.raf = requestAnimationFrame(loop);
@@ -768,6 +929,8 @@ document.querySelector('.done .tick').innerHTML = I.tick;
 $('start').addEventListener('click', () => store.get('safetyOk', false) ? showPreview() : showSafety(true));
 $('list').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) showExercise(+r.dataset.i); });
 $('openSafety').addEventListener('click', () => showSafety(false));
+$('logReach').addEventListener('click', showReachTest);
+$('openProgress').addEventListener('click', showProgress);
 $('openSettings').addEventListener('click', showSettings);
 $('openSettings2').addEventListener('click', showSettings);
 $('pSound').addEventListener('click', () => { const on = !(settings.voice || settings.beeps); settings.voice = on; settings.beeps = on; saveSettings(); syncSoundIcon(); toast(on ? 'Sound on' : 'Sound off'); if (!on) try { speechSynthesis.cancel(); } catch(e){} });

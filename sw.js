@@ -1,5 +1,5 @@
 // Touching Toes service worker: app shell offline, always fetch fresh index when online.
-const CACHE = 'tt-v3';
+const CACHE = 'tt-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
